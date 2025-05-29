@@ -33,7 +33,15 @@ type WsClient struct {
 	ready    bool
 	username string
 	loggedIn bool
+	mu       sync.Mutex
 }
+
+type Battle struct {
+	p1, p2     *WsClient
+	cancelChan chan struct{}
+}
+
+var activeBattle *Battle
 
 var clients []*WsClient
 var allPlayers = make(map[string]Player)
@@ -79,7 +87,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 	// 2) Khi disconnect
 	defer func() {
 		conn.Close()
-		// Xóa client khỏi slice
+
 		clientsMu.Lock()
 		for i, c := range clients {
 			if c == client {
@@ -89,16 +97,34 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 		}
 		clientsMu.Unlock()
 
-		// Nếu client đã login, broadcast giải phóng role
 		if client.loggedIn {
-			log.Printf("[DEBUG] 📴 Client disconnected: %s (user=%s), releasing role\n",
-				addr, client.username)
+			log.Printf("[DEBUG] 📴 Client disconnected: %s (user=%s), releasing role\n", addr, client.username)
+
 			broadcast(map[string]interface{}{
 				"type":     "role_released",
 				"username": client.username,
 			})
-		} else {
-			log.Printf("[DEBUG] 📴 Client disconnected: %s (no user)\n", addr)
+			stopManaRegen(client.username)
+
+			// ❗ Reset người còn lại
+			for _, c := range clients {
+				if c != client && c.loggedIn {
+
+					mana[c.username] = 5
+					c.ready = false
+					stopManaRegen(c.username)
+					safeWriteJSON(c, map[string]interface{}{
+						"type":   "force_reset",
+						"reason": client.username + " has left the match.",
+					})
+				}
+			}
+
+			// ❗ Huỷ simulateBattle nếu cần
+			if activeBattle != nil && (activeBattle.p1 == client || activeBattle.p2 == client) {
+				close(activeBattle.cancelChan)
+				activeBattle = nil
+			}
 		}
 	}()
 
@@ -198,7 +224,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 			if mana[user] < cost {
 				client.conn.WriteJSON(map[string]interface{}{
 					"type":    "error",
-					"message": "Dont have enough mana.",
+					"message": "Dont have enough mana!.",
 				})
 				continue
 			}
@@ -217,7 +243,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 			if opponent == "" {
 				client.conn.WriteJSON(map[string]interface{}{
 					"type":    "error",
-					"message": "Không tìm thấy đối thủ.",
+					"message": "No opponent is online.",
 				})
 				continue
 			}
@@ -255,6 +281,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 
 		case "ping":
 			client.conn.WriteJSON(map[string]interface{}{"type": "pong"})
+			log.Printf("[DEBUG] Pong to the client!.")
 
 		default:
 			log.Printf("[WARN] Unknown message type: %v\n", msg["type"])
@@ -272,17 +299,27 @@ func checkStartGame() {
 }
 
 func simulateBattle(p1, p2 *WsClient) {
-	log.Printf("[DEBUG] ⏳ simulateBattle sleeping 3m for %s vs %s\n", p1.username, p2.username)
-	time.Sleep(3 * time.Minute)
+	log.Printf("[DEBUG] ⏳ simulateBattle running for %s vs %s\n", p1.username, p2.username)
 
+	for i := 0; i < 180; i++ { // 180 giây
+		time.Sleep(1 * time.Second)
+
+		// Nếu một trong hai player đã out
+		if !isClientConnected(p1.username) || !isClientConnected(p2.username) {
+			log.Printf("[WARN] 🛑 Trận đấu bị huỷ do 1 người thoát.\n")
+			return
+		}
+	}
+
+	// Vẫn còn đủ người chơi → xử lý kết quả
 	winner := p1
 	loser := p2
 	if rand.Intn(2) == 1 {
 		winner, loser = p2, p1
 	}
 
-	winner.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "You win!"})
-	loser.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "You lose!"})
+	safeWriteJSON(winner, map[string]interface{}{"type": "result", "result": "You win!"})
+	safeWriteJSON(loser, map[string]interface{}{"type": "result", "result": "You lose!"})
 
 	saveMatchHistory(MatchHistoryEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -299,7 +336,25 @@ func simulateBattle(p1, p2 *WsClient) {
 	stopManaRegen(p2.username)
 	p1.ready = false
 	p2.ready = false
+}
 
+func isClientConnected(username string) bool {
+	for _, c := range clients {
+		if c.loggedIn && c.username == username {
+			return true
+		}
+	}
+	return false
+}
+
+func safeWriteJSON(c *WsClient, v interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := c.conn.WriteJSON(v)
+	if err != nil {
+		log.Printf("[ERROR] ❌ WriteJSON to %s failed: %v\n", c.username, err)
+	}
 }
 
 func broadcast(msg map[string]interface{}) {
@@ -307,6 +362,7 @@ func broadcast(msg map[string]interface{}) {
 	for _, c := range clients {
 		c.conn.WriteJSON(msg)
 	}
+
 }
 
 func updateExp(username string, gain int) {

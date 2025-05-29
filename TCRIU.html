@@ -15,19 +15,19 @@
 
       <!-- LOGIN PANEL -->
       <div id="login" class="w-full max-w-md bg-slate-400 p-6 rounded-lg shadow-md">
-        <h2 class="text-2xl font-bold mb-4 text-white">Login To TCR GAME!</h2>
+        <h2 class="text-2xl font-bold mb-4 text-white text-center">♞Login To TCR GAME!♕</h2>
         <label class="block mb-2 text-white">Select Player:</label>
-        <select id="username" class="w-full mb-4 p-2 border rounded">
-          <option value="player1">Player 1</option>
-          <option value="player2">Player 2</option>
+        <select id="username" class="w-full mb-4 p-2 border rounded font-semibold bg-slate-400">
+          <option value="player1" class="text-center font-semibold">Player 1</option>
+          <option value="player2" class="text-center font-semibold">Player 2</option>
         </select>
         <input id="password" type="password" placeholder="Password"
                class="w-full mb-4 p-2 border rounded"/>
         <button onclick="login()"
-                class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+                class="w-full bg-purple-700 text-white py-2 rounded hover:bg-blue-700">
           Login
         </button>
-        <p id="loginMsg" class="mt-2 text-red-900"></p>
+        <p id="loginMsg" class="mt-2 text-rose-700"></p>
       </div>
 
       <!-- GAME PANEL -->
@@ -39,21 +39,32 @@
         <!-- STATS -->
         <div class="flex space-x-16 w-full justify-center">
           <!-- Your Stats -->
-          <div class="text-center p-4 bg-blue-50 rounded-lg shadow-md w-1/3">
+          <div id="yourStats" class="relative text-center p-4 bg-blue-100 rounded-lg shadow-md w-1/3">
+            <img src="img/tower_damaged.png" id="yourDamageOverlay"
+                class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 hidden z-10" alt="Damage"/>
+            <img src="img/tower_healing.png" id="yourHealOverlay"
+                class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 hidden z-20" alt="Healing"/>
+            <img src=" " class="mx-auto w-16 h-16 mb-2" alt="Your Tower"/>
             <h3 class="text-lg font-semibold text-blue-700">Your Stats</h3>
             <p id="yourTowerHp" class="mt-2 text-blue-600">Tower HP: 100</p>
             <p id="yourMana" class="mt-1 text-blue-600">Mana: 5</p>
           </div>
           <!-- Opponent Stats -->
-          <div class="text-center p-4 bg-red-50 rounded-lg shadow-md w-1/3">
+          <div  id="oppStats" class="relative text-center p-4 bg-red-100 rounded-lg shadow-md w-1/3">
+            <img src="img/tower_damaged.png" id="oppDamageOverlay"
+                class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 hidden z-10" alt="Damage"/>
+            <img src="img/tower_healing.png" id="oppHealOverlay"
+                class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 hidden z-20" alt="Healing"/>
+            
+            <img src="" class="mx-auto w-16 h-16 mb-2" alt="Opponent Tower"/>
             <h3 class="text-lg font-semibold text-red-700">Opponent Stats</h3>
             <p id="opponentTowerHp" class="mt-2 text-red-600">Tower HP: 100</p>
-            <p id="opponentMana" class="mt-1 text-red-600">Mana: 5</p>
+            <p id="opponentMana" class="mt-1 text-red-600">Mana: X</p>
           </div>
         </div>
 
         <button id="startBtn"
-                class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+                class="bg-blue-900 text-white px-6 py-2 rounded hover:bg-green-600">
           Ready
         </button>
 
@@ -90,7 +101,7 @@
     <!-- RIGHT SIDE: Log -->
     <div class="w-1/3 bg-neutral-100 p-6 flex flex-col">
       <h2 class="text-2xl font-bold mb-4">Log</h2>
-      <div id="log" class="flex-1 overflow-y-auto space-y-1"></div>
+      <div id="log" class="flex-1 overflow-y-auto space-y-1 text-sm"></div>
     </div>
   </div>
 
@@ -98,6 +109,7 @@
     // State
     let socket = new WebSocket("ws://localhost:9001/ws");
     let ready = false, timeLeft = 180, timer, manaTimer;
+    let start = false;
     let yourMana = 5, yourTowerHp = 100;
     let oppMana = 5, oppTowerHp = 100;
     let currentUser = "";
@@ -107,7 +119,7 @@
       document.getElementById('yourTowerHp').textContent = `Tower HP: ${yourTowerHp}`;
     };
     const updOpp = () => {
-      document.getElementById('opponentMana').textContent = `Mana: ${oppMana}`;
+      document.getElementById('opponentMana').textContent = `Mana: X`;
       document.getElementById('opponentTowerHp').textContent = `Tower HP: ${oppTowerHp}`;
     };
 
@@ -151,13 +163,27 @@
       switch (msg.type) {
         case 'login_success':
           currentUser = msg.username;
+          const opponent = currentUser === "player1" ? "player2" : "player1";
+
           document.getElementById('login').classList.add('hidden');
           document.getElementById('game').classList.remove('hidden');
           document.getElementById('troopButtons').classList.remove('hidden');
+
           document.getElementById('userInfo').textContent =
             `👤 ${currentUser} | Lv ${msg.level} | EXP ${msg.exp}`;
           document.getElementById('greeting').textContent =
             `Hello, ${currentUser.toUpperCase()}!`;
+
+     
+          const yourTowerImg = document.querySelector('#yourStats img[alt="Your Tower"]');
+          const oppTowerImg = document.querySelector('#oppStats img[alt="Opponent Tower"]');
+          if (currentUser === "player1") {
+            yourTowerImg.src = "img/tower_large_white.png";
+            oppTowerImg.src = "img/tower_large_black.png";
+          } else {
+            yourTowerImg.src = "img/tower_large_black.png";
+            oppTowerImg.src = "img/tower_large_white.png";
+          }
           break;
 
         case 'login_error':
@@ -167,13 +193,36 @@
         case 'start':
           logMsg('🔥 Battle started!');
           timeLeft = 180;
+          start=true;
           startCountdown();
           break;
 
         case 'action':
           logMsg(`[${msg.time}] ${msg.detail}`);
 
-          if (msg.actor === currentUser) {
+          const parts = msg.detail.split(':');
+          const actorPart = parts[0].trim();
+          const actor = actorPart.split(' ')[0];
+          const troopName = parts[1].trim();
+
+          // Heal: nếu là Queen
+          if (troopName === "Queen" && actor === currentUser) {
+            showHealOverlay(); // bản thân dùng Queen → heal bản thân
+          } else if (troopName === "Queen" && actor !== currentUser) {
+            showOpponentHealOverlay(); // đối thủ dùng Queen → heal họ
+          }
+
+          // Damage: nếu không phải Queen
+          if (troopName !== "Queen") {
+            if (actor === currentUser) {
+              showDamageOverlay("oppDamageOverlay"); // mình gây damage
+            } else {
+              showDamageOverlay("yourDamageOverlay"); // mình bị damage
+            }
+          }
+
+          // Cập nhật stats
+          if (actor === currentUser) {
             yourMana = msg.actorMana;
             yourTowerHp = msg.actorHp;
             oppMana = msg.targetMana;
@@ -213,7 +262,27 @@
             updYour();
           }
           break;  
+        case 'force_reset':
+          ready = false;
+          start = false;                    // 💥 thêm dòng này
+          clearInterval(timer);            // ⛔ dừng countdown
+          clearInterval(manaTimer);        // ⛔ dừng mana regen
+          timeLeft = 180;                  // ⏱ reset thời gian
+          yourMana = oppMana = 5;
+          yourTowerHp = oppTowerHp = 100;
+
+          document.getElementById('status').textContent = 'Waiting for Ready...';
+          document.getElementById('startBtn').disabled = false;
+          //document.getElementById('troopButtons').classList.add('hidden');
+          logMsg(`⚠️ ${msg.reason}`);
+          updYour(); updOpp();
+          break;
+
         case 'error':
+          if (!start) {
+            logMsg("⚠️ Please ready for finding a match.");
+            return;
+          }
           logMsg(msg.message);
           break;
         
@@ -237,6 +306,10 @@
     };
 
     function deployTroop(troop) {
+      if (!start) {
+        logMsg("⚠️ Please ready for finding a match.");
+        return;
+      }
       socket.send(JSON.stringify({ type: 'deploy', troop }));
     }
 
@@ -257,9 +330,36 @@
       }, 1000);
     }
 
+    function showDamageOverlay(target) {
+      const overlay = document.getElementById(target);
+      overlay.classList.remove("hidden");
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+      }, 1000); // 1 giây
+    }
+    function showHealOverlay() {
+      const overlay = document.getElementById("yourHealOverlay");
+      overlay.classList.remove("hidden");
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+      }, 1000);
+    }
+    function showOpponentHealOverlay() {
+      const overlay = document.getElementById("oppHealOverlay");
+      overlay.classList.remove("hidden");
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+      }, 1000);
+    }
+
+
     // Init
     updYour();
     updOpp();
+
+    setInterval(() => {
+      socket.send(JSON.stringify({ type: 'ping' }));
+    }, 20000); // gửi ping mỗi 30s
   </script>
 </body>
 </html>
