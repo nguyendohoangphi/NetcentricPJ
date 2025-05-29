@@ -61,27 +61,27 @@
         <div id="troopButtons" class="hidden flex flex-wrap  justify-center space-x-4">
           <button onclick="deployTroop('Pawn',3)"
                   class="flex items-center px-4 py-2 border bg-green-600 rounded hover:bg-gray-200 text-white hover:text-stone-900">
-            <img src="img/pawn_large.png" class="w-8 h-8 mr-2 " alt="Pawn"/>Pawn
+            <img src="img/pawn_large.png" class="w-8 h-8 mr-2 " alt="Pawn"/>Pawn: 3
           </button>
           <button onclick="deployTroop('Bishop',4)"
                   class="flex items-center px-4 py-2 border bg-purple-600 rounded hover:bg-gray-200 text-white hover:text-stone-900"  >
-            <img src="img/bishop_large.png" class="w-8 h-8 mr-2" alt="Bishop"/>Bishop
+            <img src="img/bishop_large.png" class="w-8 h-8 mr-2" alt="Bishop"/>Bishop: 4
           </button>
           <button onclick="deployTroop('Rook',5)"
                   class="flex items-center px-4 py-2 border bg-indigo-600 rounded hover:bg-gray-200 text-white hover:text-stone-900">
-            <img src="img/rook_large.png" class="w-8 h-8 mr-2" alt="Rook"/>Rook
+            <img src="img/rook_large.png" class="w-8 h-8 mr-2" alt="Rook"/>Rook: 5
           </button>
           <button onclick="deployTroop('Knight',5)"
                   class="flex items-center px-4 py-2 border bg-pink-600 rounded hover:bg-gray-200 text-white hover:text-stone-900">
-            <img src="img/knight_large.png" class="w-8 h-8 mr-2" alt="Knight"/>Knight
+            <img src="img/knight_large.png" class="w-8 h-8 mr-2" alt="Knight"/>Knight: 5
           </button>
           <button onclick="deployTroop('Prince',6)"
                   class="flex items-center px-4 py-2 border bg-orange-600 rounded hover:bg-gray-200 text-white hover:text-stone-900">
-            <img src="img/prince_large.png" class="w-8 h-8 mr-2" alt="Prince"/>Prince
+            <img src="img/prince_large.png" class="w-8 h-8 mr-2" alt="Prince"/>Prince: 6
           </button>
           <button onclick="deployTroop('Queen',5)"
                   class="flex items-center px-4 py-2 border bg-teal-600 rounded hover:bg-gray-200 text-white hover:text-stone-900">
-            <img src="img/queen_large.png" class="w-8 h-8 mr-2" alt="Queen"/>Queen
+            <img src="img/queen_large.png" class="w-8 h-8 mr-2" alt="Queen"/>Queen: 5
           </button>
         </div>
       </div>
@@ -101,10 +101,7 @@
     let yourMana = 5, yourTowerHp = 100;
     let oppMana = 5, oppTowerHp = 100;
     let currentUser = "";
-    const dmg = { Pawn:3, Bishop:4, Rook:5, Knight:5, Prince:6, Queen:5 };
-    const cost= { Pawn:3, Bishop:4, Rook:5, Knight:5, Prince:6, Queen:5 };
 
-    // Helpers
     const updYour = () => {
       document.getElementById('yourMana').textContent = `Mana: ${yourMana}`;
       document.getElementById('yourTowerHp').textContent = `Tower HP: ${yourTowerHp}`;
@@ -113,57 +110,45 @@
       document.getElementById('opponentMana').textContent = `Mana: ${oppMana}`;
       document.getElementById('opponentTowerHp').textContent = `Tower HP: ${oppTowerHp}`;
     };
+
     const troopColors = {
-    Pawn:   'text-green-600',
-    Bishop: 'text-purple-600',
-    Rook:   'text-indigo-600',
-    Knight: 'text-pink-600',
-    Prince: 'text-orange-600',
-    Queen:  'text-teal-600',
-  };
+      Pawn: 'text-green-600',
+      Bishop: 'text-purple-600',
+      Rook: 'text-indigo-600',
+      Knight: 'text-pink-600',
+      Prince: 'text-orange-600',
+      Queen: 'text-teal-600',
+    };
 
-  function logMsg(m) {
-    const lg = document.getElementById('log');
-    const e  = document.createElement('div');
+    function logMsg(m) {
+      const lg = document.getElementById('log');
+      const e = document.createElement('div');
 
-    // Chỉ format nếu có "deployed:"
-    if (m.includes('deployed:')) {
-      // Tách timestamp và phần còn lại
-      const [timePart, rest] = m.split('] ');
-      const time = timePart + ']';
+      if (m.includes('deployed:')) {
+        const [timePart, rest] = m.split('] ');
+        const time = timePart + ']';
+        const [actorPart, troopPart] = rest.split(': ');
+        const actor = actorPart.split(' ')[0];
+        const troop = troopPart.trim();
+        const actorColor = actor === 'player1' ? 'text-blue-600' : 'text-red-600';
+        const tColor = troopColors[troop] || 'text-yellow-700';
 
-      // Tách actor và troop
-      const [actorPart, troopPart] = rest.split(': ');
-      const actor = actorPart.split(' ')[0];       // ví dụ "player1"
-      const troop = troopPart.trim();               // ví dụ "Knight"
+        e.innerHTML = `
+          <span class="text-gray-500">${time}</span>
+          <span class="${actorColor} font-bold ml-2">${actor}</span>
+          <span class="text-gray-700 ml-1">deployed:</span>
+          <span class="${tColor} font-semibold ml-1">${troop}</span>
+        `;
+      } else {
+        e.textContent = m;
+      }
 
-      // Chọn màu actor
-      const actorColor = actor === 'player1'
-        ? 'text-blue-600'
-        : 'text-red-600';
-
-      // Chọn màu troop từ map hoặc vàng nếu không có
-      const tColor = troopColors[troop] || 'text-yellow-700';
-
-      // Build HTML có màu
-      e.innerHTML = `
-        <span class="text-gray-500">${time}</span>
-        <span class="${actorColor} font-bold ml-2">${actor}</span>
-        <span class="text-gray-700 ml-1">deployed:</span>
-        <span class="${tColor} font-semibold ml-1">${troop}</span>
-      `;
-    } else {
-      // Log bình thường, không format
-      e.textContent = m;
+      lg.prepend(e);
     }
 
-    lg.prepend(e);
-  }
-
-    // Socket handlers
     socket.onmessage = ev => {
       const msg = JSON.parse(ev.data);
-      switch(msg.type) {
+      switch (msg.type) {
         case 'login_success':
           currentUser = msg.username;
           document.getElementById('login').classList.add('hidden');
@@ -183,39 +168,30 @@
           logMsg('🔥 Battle started!');
           timeLeft = 180;
           startCountdown();
-          startManaRegen();
           break;
 
         case 'action':
-          // In log
           logMsg(`[${msg.time}] ${msg.detail}`);
 
-          
-          const parts = msg.detail.split(':');
-          // actorPart có thể là "player1 triển khai" hoặc "player1 deployed"
-          const actorPart = parts[0].trim();
-          const actor = actorPart.split(' ')[0];       // lấy "player1"
-          const troopName = parts[1].trim();           // lấy "Pawn", "Bishop", …
-
-          // Cập nhật stats
-          if (actor === currentUser) {
-            // mình đánh đối thủ
-            oppTowerHp = Math.max(0, oppTowerHp - dmg[troopName]);
-            oppMana    = Math.max(0, oppMana    - cost[troopName]);
+          if (msg.actor === currentUser) {
+            yourMana = msg.actorMana;
+            yourTowerHp = msg.actorHp;
+            oppMana = msg.targetMana;
+            oppTowerHp = msg.targetHp;
           } else {
-            // đối thủ đánh mình
-            yourTowerHp = Math.max(0, yourTowerHp - dmg[troopName]);
-            yourMana    = Math.max(0, yourMana    - cost[troopName]);
+            yourMana = msg.targetMana;
+            yourTowerHp = msg.targetHp;
+            oppMana = msg.actorMana;
+            oppTowerHp = msg.actorHp;
           }
-          // Luôn cập nhật cả hai bảng
-          updateYourStats();
-          updateOppStats();
+
+          updYour();
+          updOpp();
           break;
 
         case 'result':
           logMsg(`🏁 ${msg.result}`);
           clearInterval(timer);
-          clearInterval(manaTimer);
           document.getElementById('status').textContent = 'Waiting for Ready...';
           ready = false;
           yourMana = oppMana = 5;
@@ -224,29 +200,36 @@
           break;
 
         case 'role_selected':
-          document.querySelector(
-            `#username option[value="${msg.username}"]`
-          ).disabled = true;
+          document.querySelector(`#username option[value="${msg.username}"]`).disabled = true;
           break;
 
         case 'role_released':
-          document.querySelector(
-            `#username option[value="${msg.username}"]`
-          ).disabled = false;
+          document.querySelector(`#username option[value="${msg.username}"]`).disabled = false;
           break;
+        case 'mana_update':
+          if (msg.username === currentUser) {
+            yourMana = msg.mana;
+            yourTowerHp = msg.tower_hp;
+            updYour();
+          }
+          break;  
+        case 'error':
+          logMsg(msg.message);
+          break;
+        
+
       }
     };
 
-    // Actions
     function login() {
       const u = document.getElementById('username').value;
       const p = document.getElementById('password').value;
-      socket.send(JSON.stringify({ type:'login', username:u, password:p }));
+      socket.send(JSON.stringify({ type: 'login', username: u, password: p }));
     }
 
     document.getElementById('startBtn').onclick = () => {
       if (!ready) {
-        socket.send(JSON.stringify({ type:'ready' }));
+        socket.send(JSON.stringify({ type: 'ready' }));
         document.getElementById('status').textContent = 'Ready...';
         document.getElementById('startBtn').disabled = true;
         ready = true;
@@ -254,20 +237,14 @@
     };
 
     function deployTroop(troop) {
-      if (yourMana < cost[troop]) {
-        logMsg(`⚠️ Not enough mana for ${troop}`);
-        return;
-      }
-      yourMana -= cost[troop];
-      updYour();
-      socket.send(JSON.stringify({ type:'deploy', troop }));
+      socket.send(JSON.stringify({ type: 'deploy', troop }));
     }
 
     function startCountdown() {
       const statusEl = document.getElementById('status');
       const fmt = t => {
-        const m = Math.floor(t/60), s = t%60;
-        return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const m = Math.floor(t / 60), s = t % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       };
       statusEl.textContent = fmt(timeLeft);
       timer = setInterval(() => {
@@ -280,17 +257,9 @@
       }, 1000);
     }
 
-    function startManaRegen() {
-      manaTimer = setInterval(() => {
-        if (yourMana < 10) {
-          yourMana++;
-          updYour();
-        }
-      }, 1000);
-    }
-
-    // Init stats display
-    updYour(); updOpp();
+    // Init
+    updYour();
+    updOpp();
   </script>
 </body>
 </html>

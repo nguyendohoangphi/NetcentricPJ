@@ -38,9 +38,28 @@ type WsClient struct {
 var clients []*WsClient
 var allPlayers = make(map[string]Player)
 var clientsMu sync.Mutex
+var regenTimers = make(map[string]*time.Ticker)
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+var towerHp = map[string]int{
+	"player1": 100,
+	"player2": 100,
+}
+var mana = map[string]int{
+	"player1": 5,
+	"player2": 5,
+}
+
+var troopDamage = map[string]int{
+	"Pawn": 3, "Bishop": 4, "Rook": 5,
+	"Knight": 5, "Prince": 6, "Queen": 5,
+}
+var troopCost = map[string]int{
+	"Pawn": 3, "Bishop": 4, "Rook": 5,
+	"Knight": 5, "Prince": 6, "Queen": 5,
 }
 
 func handleWs(w http.ResponseWriter, r *http.Request) {
@@ -162,11 +181,76 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 				})
 				continue
 			}
-			detail := client.username + " deployed: " + msg["troop"].(string)
+
+			troop, ok := msg["troop"].(string)
+			if !ok {
+				client.conn.WriteJSON(map[string]interface{}{
+					"type":    "error",
+					"message": "Thiếu tên troop.",
+				})
+				continue
+			}
+
+			user := client.username
+			cost := troopCost[troop]
+			damage := troopDamage[troop]
+
+			if mana[user] < cost {
+				client.conn.WriteJSON(map[string]interface{}{
+					"type":    "error",
+					"message": "Dont have enough mana.",
+				})
+				continue
+			}
+
+			// Trừ mana người dùng
+			mana[user] -= cost
+
+			// Tìm đối thủ
+			var opponent string
+			for _, c := range clients {
+				if c != client && c.loggedIn {
+					opponent = c.username
+					break
+				}
+			}
+			if opponent == "" {
+				client.conn.WriteJSON(map[string]interface{}{
+					"type":    "error",
+					"message": "Không tìm thấy đối thủ.",
+				})
+				continue
+			}
+
+			// Trừ HP đối thủ
+			if troop == "Queen" {
+				// 👑 Hồi máu cho chính người chơi
+				towerHp[user] += 3
+				if towerHp[user] > 100 {
+					towerHp[user] = 100
+				}
+			} else {
+				// ⚔️ Gây damage cho đối thủ như bình thường
+				towerHp[opponent] -= damage
+				if towerHp[opponent] < 0 {
+					towerHp[opponent] = 0
+				}
+			}
+
+			// Gửi thông báo cho cả hai
+			now := time.Now().Format("15:04:05")
+			detail := user + " deployed: " + troop
+
 			broadcast(map[string]interface{}{
-				"type":   "action",
-				"time":   time.Now().Format("15:04:05"),
-				"detail": detail,
+				"type":       "action",
+				"time":       now,
+				"detail":     detail,
+				"actor":      user,
+				"troop":      troop,
+				"actorMana":  mana[user],
+				"actorHp":    towerHp[user],
+				"targetMana": mana[opponent],
+				"targetHp":   towerHp[opponent],
 			})
 
 		case "ping":
@@ -181,6 +265,8 @@ func checkStartGame() {
 	log.Println("[DEBUG] ▶️  checkStartGame triggered")
 	if len(clients) >= 2 && clients[0].ready && clients[1].ready {
 		broadcast(map[string]interface{}{"type": "start"})
+		startManaRegen(clients[0].username)
+		startManaRegen(clients[1].username)
 		go simulateBattle(clients[0], clients[1])
 	}
 }
@@ -195,8 +281,8 @@ func simulateBattle(p1, p2 *WsClient) {
 		winner, loser = p2, p1
 	}
 
-	winner.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "Bạn Thắng!"})
-	loser.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "Bạn Thua!"})
+	winner.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "You win!"})
+	loser.conn.WriteJSON(map[string]interface{}{"type": "result", "result": "You lose!"})
 
 	saveMatchHistory(MatchHistoryEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -209,8 +295,11 @@ func simulateBattle(p1, p2 *WsClient) {
 	updateExp(winner.username, 30)
 	updateExp(loser.username, 10)
 
+	stopManaRegen(p1.username)
+	stopManaRegen(p2.username)
 	p1.ready = false
 	p2.ready = false
+
 }
 
 func broadcast(msg map[string]interface{}) {
@@ -277,6 +366,40 @@ func saveMatchHistory(entry MatchHistoryEntry) {
 	}
 	defer f2.Close()
 	json.NewEncoder(f2).Encode(history)
+}
+
+func startManaRegen(username string) {
+	stopManaRegen(username) // dọn dẹp cũ nếu có
+
+	ticker := time.NewTicker(1 * time.Second)
+	regenTimers[username] = ticker
+
+	go func() {
+		for range ticker.C {
+			if mana[username] < 10 {
+				mana[username]++
+				// Gửi cập nhật chỉ cho chính người chơi đó
+				for _, c := range clients {
+					if c.loggedIn && c.username == username {
+						c.conn.WriteJSON(map[string]interface{}{
+							"type":     "mana_update",
+							"username": username, // 👈 THÊM DÒNG NÀY
+							"mana":     mana[username],
+							"tower_hp": towerHp[username],
+						})
+						break
+					}
+				}
+			}
+		}
+	}()
+}
+
+func stopManaRegen(username string) {
+	if ticker, ok := regenTimers[username]; ok {
+		ticker.Stop()
+		delete(regenTimers, username)
+	}
 }
 
 func StartWebSocketServer() {
