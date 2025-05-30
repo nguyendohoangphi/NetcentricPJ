@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"math"
-	"math/rand"
 	"net/http"
 	"os"
 	"sync"
@@ -106,7 +105,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 			})
 			stopManaRegen(client.username)
 
-			// ❗ Reset người còn lại
+			//  Reset người còn lại
 			for _, c := range clients {
 				if c != client && c.loggedIn {
 
@@ -120,7 +119,7 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// ❗ Huỷ simulateBattle nếu cần
+			//  Huỷ simulateBattle nếu cần
 			if activeBattle != nil && (activeBattle.p1 == client || activeBattle.p2 == client) {
 				close(activeBattle.cancelChan)
 				activeBattle = nil
@@ -250,16 +249,43 @@ func handleWs(w http.ResponseWriter, r *http.Request) {
 
 			// Trừ HP đối thủ
 			if troop == "Queen" {
-				// 👑 Hồi máu cho chính người chơi
+				// Hồi máu cho chính người chơi
 				towerHp[user] += 3
 				if towerHp[user] > 100 {
 					towerHp[user] = 100
 				}
 			} else {
-				// ⚔️ Gây damage cho đối thủ như bình thường
+				// Gây damage cho đối thủ như bình thường
 				towerHp[opponent] -= damage
 				if towerHp[opponent] < 0 {
 					towerHp[opponent] = 0
+				}
+				if towerHp[opponent] <= 0 {
+					// Báo kết quả
+					safeWriteJSON(client, map[string]interface{}{
+						"type":   "result",
+						"result": "You win!",
+					})
+					for _, c := range clients {
+						if c.username == opponent {
+							safeWriteJSON(c, map[string]interface{}{
+								"type":   "result",
+								"result": "You lose!",
+							})
+							break
+						}
+					}
+
+					stopManaRegen(client.username)
+					stopManaRegen(opponent)
+					client.ready = false
+					for _, c := range clients {
+						if c.username == opponent {
+							c.ready = false
+							break
+						}
+					}
+					return
 				}
 			}
 
@@ -301,41 +327,51 @@ func checkStartGame() {
 func simulateBattle(p1, p2 *WsClient) {
 	log.Printf("[DEBUG] ⏳ simulateBattle running for %s vs %s\n", p1.username, p2.username)
 
-	for i := 0; i < 180; i++ { // 180 giây
+	for i := 0; i < 180; i++ {
 		time.Sleep(1 * time.Second)
-
-		// Nếu một trong hai player đã out
 		if !isClientConnected(p1.username) || !isClientConnected(p2.username) {
 			log.Printf("[WARN] 🛑 Trận đấu bị huỷ do 1 người thoát.\n")
 			return
 		}
 	}
 
-	// Vẫn còn đủ người chơi → xử lý kết quả
-	winner := p1
-	loser := p2
-	if rand.Intn(2) == 1 {
-		winner, loser = p2, p1
+	// So sánh HP để xác định người thắng
+	var winner, loser *WsClient
+	if towerHp[p1.username] > towerHp[p2.username] {
+		winner = p1
+		loser = p2
+	} else if towerHp[p2.username] > towerHp[p1.username] {
+		winner = p2
+		loser = p1
+	} else {
+		// Hoà
+		safeWriteJSON(p1, map[string]interface{}{"type": "result", "result": "Draw!"})
+		safeWriteJSON(p2, map[string]interface{}{"type": "result", "result": "Draw!"})
 	}
 
-	safeWriteJSON(winner, map[string]interface{}{"type": "result", "result": "You win!"})
-	safeWriteJSON(loser, map[string]interface{}{"type": "result", "result": "You lose!"})
-
-	saveMatchHistory(MatchHistoryEntry{
-		Timestamp: time.Now().Format(time.RFC3339),
-		Player1:   p1.username,
-		Player2:   p2.username,
-		Winner:    winner.username,
-		Result:    "Win/Lose",
-	})
-
-	updateExp(winner.username, 30)
-	updateExp(loser.username, 10)
+	if winner != nil && loser != nil {
+		safeWriteJSON(winner, map[string]interface{}{"type": "result", "result": "You win!"})
+		safeWriteJSON(loser, map[string]interface{}{"type": "result", "result": "You lose!"})
+		updateExp(winner.username, 30)
+		updateExp(loser.username, 10)
+		saveMatchHistory(MatchHistoryEntry{
+			Timestamp: time.Now().Format(time.RFC3339),
+			Player1:   p1.username,
+			Player2:   p2.username,
+			Winner:    winner.username,
+			Result:    "Win/Lose",
+		})
+	}
 
 	stopManaRegen(p1.username)
 	stopManaRegen(p2.username)
 	p1.ready = false
 	p2.ready = false
+
+	towerHp[p1.username] = 100
+	towerHp[p2.username] = 100
+	mana[p1.username] = 5
+	mana[p2.username] = 5
 }
 
 func isClientConnected(username string) bool {
@@ -439,7 +475,7 @@ func startManaRegen(username string) {
 					if c.loggedIn && c.username == username {
 						c.conn.WriteJSON(map[string]interface{}{
 							"type":     "mana_update",
-							"username": username, // 👈 THÊM DÒNG NÀY
+							"username": username,
 							"mana":     mana[username],
 							"tower_hp": towerHp[username],
 						})
