@@ -282,12 +282,12 @@
             updYour();
           }
           break;  
-        case 'force_reset':
+        case 'force_reset': //reset
           ready = false;
           start = false;                   
-          clearInterval(timer);            //  dừng countdown
-          clearInterval(manaTimer);        //  dừng mana regen
-          timeLeft = 180;                  //  reset thời gian
+          clearInterval(timer);            
+          clearInterval(manaTimer);        
+          timeLeft = 180;                  
           yourMana = oppMana = 5;
           yourTowerHp = oppTowerHp = 100;
 
@@ -309,9 +309,7 @@
 
       }
     };
-    function closeResult() {
-      document.getElementById("resultModal").classList.add("hidden");
-    }
+    
 
     function login() {
       const u = document.getElementById('username').value;
@@ -375,7 +373,9 @@
         overlay.classList.add("hidden");
       }, 1000);
     }
-
+    function closeResult() {
+      document.getElementById("resultModal").classList.add("hidden");
+    }
 
     // Init
     updYour();
